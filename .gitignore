@@ -1,0 +1,19 @@
+# Environments
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Setup
+.DS_Store
+
+# Datasets (If any huge raw datasets exist)
+data/
+
+# Note: outputs/best_model.pth is 94MB. GitHub's hard limit is 100MB. 
+# While it will push successfully, consider using Git LFS if you retrain a larger model.

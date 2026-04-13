@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriLens — Botanical Intelligence</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- ═══ Navigation ═══ -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">
+                <div class="navbar-logo">
+                    Agri<span>Lens</span>
+                </div>
+            </a>
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle Dark Mode">
+                <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <svg id="sun-icon" style="display: none;" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ═══ Hero ═══ -->
+    <section class="hero">
+        <div class="container">
+            <h1>Botanical Intelligence.</h1>
+            <p>Upload a leaf. Discover deep insights into plant health, pathology, and restorative care.</p>
+        </div>
+    </section>
+
+    <!-- ═══ Upload ═══ -->
+    <section class="upload-wrapper">
+        <div class="container">
+            <!-- Dropzone -->
+            <div class="dropzone" id="dropzone">
+                <div class="dropzone-icon">❦</div>
+                <h3>Select a specimen</h3>
+                <p>Drag and drop a leaf photo, or click to browse.</p>
+            </div>
+            
+            <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp">
+
+            <!-- Preview -->
+            <div class="preview-section" id="preview-section">
+                <div class="preview-flex">
+                    <img id="preview-img" class="preview-img" alt="Specimen Preview">
+                    <div class="preview-details">
+                        <div class="preview-name" id="preview-filename">image.jpg</div>
+                        <div class="preview-size" id="preview-filesize">0 KB</div>
+                    </div>
+                    <button class="btn btn-outline" id="clear-btn">Clear</button>
+                    <button class="btn btn-primary" id="analyze-btn">Analyze Specimen</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Results Layout ═══ -->
+    <section class="results-section" id="results-section">
+        <div class="container">
+            <div class="results-header">
+                <h2>Diagnostic Pathology</h2>
+            </div>
+
+            <div class="results-layout">
+                
+                <!-- Left: Identity & Status -->
+                <div class="result-identity">
+                    <img id="result-img" class="identity-image" alt="Analyzed leaf">
+                    
+                    <h3 class="identity-plant" id="result-plant">Plant Name</h3>
+                    <div class="status-badge" id="result-status">Status</div>
+                    
+                    <div class="confidence-block">
+                        <div class="confidence-label">Diagnosis Confidence</div>
+                        <div class="confidence-value" id="confidence-value">0%</div>
+                    </div>
+
+                    <!-- Top 3 -->
+                    <div class="top3-wrap">
+                        <h4>Alternative Considerations</h4>
+                        <div id="top3-list"></div>
+                    </div>
+                </div>
+
+                <!-- Right: Editorial Details -->
+                <div class="result-editorial">
+                    
+                    <div class="severity-wrap">
+                        <h4>Pathology Severity</h4>
+                        <div class="severity-dots">
+                            <div class="severity-dot active"><div class="severity-fill" style="transform:scaleX(1)"></div></div>
+                            <div class="severity-dot" id="sev-mod"><div class="severity-fill"></div></div>
+                            <div class="severity-dot" id="sev-high"><div class="severity-fill"></div></div>
+                            <div class="severity-dot" id="sev-crit"><div class="severity-fill"></div></div>
+                        </div>
+                        <div class="severity-labels">
+                            <span class="severity-label active" data-level="None">None</span>
+                            <span class="severity-label" data-level="Moderate">Moderate</span>
+                            <span class="severity-label" data-level="High">High</span>
+                            <span class="severity-label" data-level="Critical">Critical</span>
+                        </div>
+                    </div>
+
+                    <div class="editorial-section">
+                        <h3 class="editorial-title" id="disease-title">Disease Name</h3>
+                        <p class="editorial-text" id="info-description"></p>
+                    </div>
+
+                    <div class="editorial-section">
+                        <h3 class="editorial-title">Etymology & Cause</h3>
+                        <p class="editorial-text" id="info-cause"></p>
+                    </div>
+
+                    <div class="editorial-section">
+                        <h3 class="editorial-title">Visual Symptoms</h3>
+                        <p class="editorial-text" id="info-symptoms"></p>
+                    </div>
+
+                    <div class="editorial-section">
+                        <h3 class="editorial-title">Prescriptive Treatment</h3>
+                        <p class="editorial-text" id="info-treatment"></p>
+                    </div>
+
+                    <div class="editorial-section">
+                        <h3 class="editorial-title">Proactive Prevention</h3>
+                        <p class="editorial-text" id="info-prevention"></p>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Footer ═══ -->
+    <footer class="footer">
+        <p>AgriLens · Deep Learning Botanical Analysis</p>
+    </footer>
+
+    <!-- ═══ Loaders & Toasts ═══ -->
+    <div class="loader-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <p>Analyzing specimen...</p>
+    </div>
+
+    <div class="toast" id="toast">
+        <span id="toast-msg"></span>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
