@@ -312,12 +312,59 @@ def get_disease_info(class_name):
 # ─────────────────────────────────────────────
 #  Model Architecture
 # ─────────────────────────────────────────────
+
+# Standard inference transform: Resize short-side to 256, then center-crop 224
+# This preserves aspect ratio and focuses on the leaf subject
 transform = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(IMG_SIZE),
     transforms.ToTensor(),
     transforms.Normalize(imagenet_mean, imagenet_std)
 ])
+
+# Test-Time Augmentation (TTA) transforms for robust predictions
+tta_transforms = [
+    # Original (center crop)
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Horizontal flip
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomHorizontalFlip(p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slight rotation +15°
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomRotation((15, 15)),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slight rotation -15°
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomRotation((-15, -15)),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slightly larger crop (zoom out)
+    transforms.Compose([
+        transforms.Resize(288),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+]
+
+CONFIDENCE_THRESHOLD = 0.40  # Minimum 40% confidence to make a prediction
 
 class CropDiseaseModel(nn.Module):
     def __init__(self, num_classes):
@@ -371,16 +418,24 @@ def predict_route():
         # EXIF Fix: Rotates image correctly if taken on a smartphone
         img = Image.open(io.BytesIO(img_bytes))
         img = ImageOps.exif_transpose(img).convert("RGB")
-        
-        tensor = transform(img).unsqueeze(0).to(device)
 
+        # ── Test-Time Augmentation (TTA) ──────────────────
+        # Average predictions from multiple augmented views
+        # for more robust classification on real-world images
+        all_probs = []
         with torch.no_grad():
-            logits = model(tensor)
-            probs = torch.softmax(logits, dim=1)[0]
-            top1_idx = probs.argmax().item()
-            confidence = probs[top1_idx].item()
+            for tta_t in tta_transforms:
+                tensor = tta_t(img).unsqueeze(0).to(device)
+                logits = model(tensor)
+                probs = torch.softmax(logits, dim=1)[0]
+                all_probs.append(probs)
 
-            top3_probs, top3_indices = torch.topk(probs, min(3, len(probs)))
+            # Average all TTA predictions
+            avg_probs = torch.stack(all_probs).mean(dim=0)
+            top1_idx = avg_probs.argmax().item()
+            confidence = avg_probs[top1_idx].item()
+
+            top3_probs, top3_indices = torch.topk(avg_probs, min(3, len(avg_probs)))
             top3 = []
             for prob, idx in zip(top3_probs, top3_indices):
                 cn = class_names[idx.item()]
@@ -391,6 +446,26 @@ def predict_route():
                     "plant": info["plant"],
                     "disease": info["disease"],
                 })
+
+        # ── Confidence Threshold Check ────────────────────
+        if confidence < CONFIDENCE_THRESHOLD:
+            return jsonify({
+                "success": True,
+                "prediction": {
+                    "class_name": "Unknown",
+                    "confidence": round(confidence * 100, 2),
+                    "plant": "Unrecognized",
+                    "disease": "N/A",
+                    "status": "UNCERTAIN",
+                    "description": f"The model could not confidently identify this image (confidence: {confidence*100:.1f}%). This may not be a supported plant leaf, or the image quality may be insufficient. Please try uploading a clearer, close-up image of the leaf against a plain background.",
+                    "cause": "Image may not match any of the 38 trained disease/plant classes, or the leaf is not clearly visible.",
+                    "symptoms": "N/A",
+                    "treatment": "Please try again with a clearer image. Ensure the leaf fills most of the frame and is well-lit.",
+                    "prevention": "For best results, photograph individual leaves against a contrasting background with good lighting.",
+                    "severity": "None",
+                },
+                "top3": top3,
+            })
 
         class_name = class_names[top1_idx]
         info = get_disease_info(class_name)

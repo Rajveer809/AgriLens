@@ -8,7 +8,7 @@ import json
 import torch
 import torch.nn as nn
 from torchvision import transforms, models
-from PIL import Image
+from PIL import Image, ImageOps
 
 IMG_SIZE      = 224
 DENSE_UNITS   = 512
@@ -409,11 +409,58 @@ SEVERITY_COLORS = {
     "Critical": "🚨",
 }
 
+# Standard inference transform: Resize short-side to 256, then center-crop 224
+# This preserves aspect ratio and focuses on the leaf subject
 transform = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.Resize(256),
+    transforms.CenterCrop(IMG_SIZE),
     transforms.ToTensor(),
     transforms.Normalize(imagenet_mean, imagenet_std)
 ])
+
+# Test-Time Augmentation (TTA) transforms for robust predictions
+tta_transforms = [
+    # Original (center crop)
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Horizontal flip
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomHorizontalFlip(p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slight rotation +15°
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomRotation((15, 15)),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slight rotation -15°
+    transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.RandomRotation((-15, -15)),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+    # Slightly larger crop (zoom out)
+    transforms.Compose([
+        transforms.Resize(288),
+        transforms.CenterCrop(IMG_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(imagenet_mean, imagenet_std)
+    ]),
+]
+
+CONFIDENCE_THRESHOLD = 0.40  # Minimum 40% confidence to make a prediction
 
 
 class CropDiseaseModel(nn.Module):
@@ -467,14 +514,22 @@ def predict(image_path, model_path, class_names_path):
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    img    = Image.open(image_path).convert("RGB")
-    tensor = transform(img).unsqueeze(0).to(device)
+    # EXIF Fix: Rotates image correctly if taken on a smartphone
+    img = Image.open(image_path)
+    img = ImageOps.exif_transpose(img).convert("RGB")
 
+    # Test-Time Augmentation: average predictions from multiple views
+    all_probs = []
     with torch.no_grad():
-        logits = model(tensor)
-        probs  = torch.softmax(logits, dim=1)[0]
-        top1_idx = probs.argmax().item()
-        confidence = probs[top1_idx].item()
+        for tta_t in tta_transforms:
+            tensor = tta_t(img).unsqueeze(0).to(device)
+            logits = model(tensor)
+            probs = torch.softmax(logits, dim=1)[0]
+            all_probs.append(probs)
+
+        avg_probs = torch.stack(all_probs).mean(dim=0)
+        top1_idx = avg_probs.argmax().item()
+        confidence = avg_probs[top1_idx].item()
 
     class_name = class_names[top1_idx]
     info = get_disease_info(class_name)
@@ -486,6 +541,15 @@ def predict(image_path, model_path, class_names_path):
     print(f"  Image     : {image_path}")
     print(f"  Confidence: {confidence * 100:.2f}%")
     print("-" * 60)
+
+    # Confidence threshold check
+    if confidence < CONFIDENCE_THRESHOLD:
+        print(f"  ⚠️  LOW CONFIDENCE — prediction may be unreliable!")
+        print(f"  The model is not confident enough ({confidence*100:.1f}%) to make")
+        print(f"  a reliable diagnosis. Please try a clearer image.")
+        print("=" * 60)
+        return class_name, confidence
+
     print(f"  Plant     : {info['plant']}")
     print(f"  Status    : {severity_icon}  {info['status']}")
     print(f"  Disease   : {info['disease']}")

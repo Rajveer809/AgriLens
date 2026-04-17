@@ -57,20 +57,35 @@ print(f"[INFO] Using device: {DEVICE}")
 imagenet_mean = [0.485, 0.456, 0.406]
 imagenet_std  = [0.229, 0.224, 0.225]
 
-# Training transforms include augmentation (4.4)
+# Training transforms: aggressive augmentation to simulate real-world conditions
+# This prevents overfitting to clean lab backgrounds from PlantVillage dataset
 train_transforms = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),          # 4.1 resize to 224×224
-    transforms.RandomHorizontalFlip(),                # 4.4 random horizontal flip
-    transforms.RandomRotation(15),                    # 4.4 ±15° rotation
-    transforms.ColorJitter(brightness=0.2),           # 4.4 brightness adjustment
-    transforms.RandomResizedCrop(IMG_SIZE,            # 4.4 random zoom 0.8–1.2
-                                  scale=(0.8, 1.2)),
+    transforms.Resize(256),                           # Resize short side (preserve aspect ratio)
+    transforms.RandomResizedCrop(IMG_SIZE,            # Random crop simulates varying framing
+                                  scale=(0.7, 1.0),
+                                  ratio=(0.9, 1.1)),
+    transforms.RandomHorizontalFlip(),                # Random horizontal flip
+    transforms.RandomVerticalFlip(p=0.1),             # Occasional vertical flip
+    transforms.RandomRotation(25),                    # ±25° rotation (phone angles)
+    transforms.ColorJitter(                           # Simulate varied lighting conditions
+        brightness=0.3,
+        contrast=0.3,
+        saturation=0.3,
+        hue=0.05
+    ),
+    transforms.RandomPerspective(                     # Simulate viewing angle distortion
+        distortion_scale=0.2, p=0.3
+    ),
+    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),  # Simulate camera blur
     transforms.ToTensor(),
-    transforms.Normalize(imagenet_mean, imagenet_std) # 4.2 normalise to [0,1] + ImageNet stats
+    transforms.Normalize(imagenet_mean, imagenet_std),
+    transforms.RandomErasing(p=0.2, scale=(0.02, 0.15)),  # Force model to use distributed features
 ])
 
+# Validation/test transform must match inference: Resize(256) + CenterCrop(224)
 val_test_transforms = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.Resize(256),
+    transforms.CenterCrop(IMG_SIZE),
     transforms.ToTensor(),
     transforms.Normalize(imagenet_mean, imagenet_std)
 ])
